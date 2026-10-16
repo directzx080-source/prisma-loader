@@ -1,5 +1,7 @@
 -- Prisma Services | NEBULA V6.2 | server-authorized access.
+local PRODUCT = "pvp"
 local ORIGIN = "https://prisma-sniper-keys-c7f2.ochregleam1.chatgpt.site"
+local KEY_URL = ORIGIN .. "/?product=" .. PRODUCT
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
@@ -24,7 +26,7 @@ local copy = {
         incomplete = "Cole a chave completa gerada no site.", noHttp = "Este executor não oferece HTTP request para validar chaves.",
         connection = "Não foi possível conectar ao servidor. Tente novamente.", invalidResponse = "O servidor enviou uma resposta inválida.",
         invalidKey = "Chave inválida, desativada ou expirada.", unavailable = "A validação está indisponível. Tente novamente.",
-        refused = "A solicitação de acesso foi recusada.", noSource = "O servidor não enviou o painel.",
+        refused = "A solicitação de acesso foi recusada.", wrongProduct = "Esta chave não libera este script. Use uma chave PvP ou para os dois scripts.", noSource = "O servidor não enviou o painel.",
         compile = "Não foi possível compilar o painel neste executor.", openFailed = "Não foi possível abrir o painel neste executor.",
         expired = "Sua chave expirou. Gere outra no site.", renewal = "Não foi possível renovar seu acesso. Valide sua chave novamente.",
         copied = "Link copiado. Abra no navegador para gerar sua chave.",
@@ -38,7 +40,7 @@ local copy = {
         incomplete = "Paste the complete key generated on the website.", noHttp = "This executor does not provide HTTP request for key validation.",
         connection = "Could not connect to the server. Please try again.", invalidResponse = "The server returned an invalid response.",
         invalidKey = "This key is invalid, disabled or expired.", unavailable = "Key validation is unavailable. Please try again.",
-        refused = "The access request was rejected.", noSource = "The server did not return the panel.",
+        refused = "The access request was rejected.", wrongProduct = "This key does not unlock this script. Use a PvP key or a key for both scripts.", noSource = "The server did not return the panel.",
         compile = "The panel could not compile in this executor.", openFailed = "The panel could not open in this executor.",
         expired = "Your key has expired. Get a new key on the website.", renewal = "Could not renew access. Please validate your key again.",
         copied = "Link copied. Open it in your browser to get a key.",
@@ -278,15 +280,16 @@ local httpRequest = (type(request) == "function" and request)
     or (type(http) == "table" and type(http.request) == "function" and http.request)
 local function post(path, key)
     if not httpRequest then return nil, "noHttp" end
-    local ok, response = pcall(httpRequest, {Url = ORIGIN .. path, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode({key = key})})
+    local ok, response = pcall(httpRequest, {Url = ORIGIN .. path, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = HttpService:JSONEncode({key = key, product = PRODUCT})})
     if not ok or type(response) ~= "table" or type(response.Body) ~= "string" or #response.Body > 500000 then return nil, "connection" end
     local decoded, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
     if not decoded or type(data) ~= "table" then return nil, "invalidResponse" end
     local status = tonumber(response.StatusCode)
     if status ~= 200 or data.success ~= true then
-        local reason = status == 401 and "invalidKey" or (status == 403 and "refused" or "unavailable")
+        local reason = status == 401 and "invalidKey" or (status == 403 and (data.code == "wrong_product" and "wrongProduct" or "refused") or "unavailable")
         return nil, reason, status
     end
+    if data.product ~= PRODUCT then return nil, "invalidResponse", 403 end
     return data
 end
 local function showLogin(key)
@@ -338,7 +341,7 @@ local function unlock()
                     if valid.lifetime == true then expiresAt = nil end
                 else
                     failures = failures + 1
-                    if status == 401 or failures >= 2 then showLogin(reason or "renewal") end
+                    if status == 401 or status == 403 or failures >= 2 then showLogin(reason or "renewal") end
                 end
             end)
         end)
@@ -350,6 +353,6 @@ connections[#connections + 1] = submit.Activated:Connect(unlock)
 connections[#connections + 1] = input.FocusLost:Connect(function(enter) if enter then unlock() end end)
 connections[#connections + 1] = getKey.Activated:Connect(function()
     if introActive or not alive then return end
-    if type(setclipboard) == "function" and pcall(setclipboard, ORIGIN) then setMessage("copied", false) else setMessage("hint", false, ORIGIN) end
+    if type(setclipboard) == "function" and pcall(setclipboard, KEY_URL) then setMessage("copied", false) else setMessage("hint", false, KEY_URL) end
 end)
 return {Stop = cleanup}
